@@ -12,8 +12,11 @@ import (
 type DB2ConnectionManager struct {
 	ConnectionString string
 
-	mu         sync.Mutex
-	db         *sql.DB
+	mu sync.Mutex
+	db *sql.DB
+
+	open        func(driverName, dataSourceName string) (*sql.DB, error)
+	ping        func(context.Context, *sql.DB) error
 	initialized bool
 }
 
@@ -40,7 +43,11 @@ func (x *DB2ConnectionManager) Take(ctx context.Context) (*sql.DB, error) {
 	}
 
 	// DB2 驱动名称为 "go_ibm_db"
-	db, err := sql.Open("go_ibm_db", x.ConnectionString)
+	open := x.open
+	if open == nil {
+		open = sql.Open
+	}
+	db, err := open("go_ibm_db", x.ConnectionString)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +57,11 @@ func (x *DB2ConnectionManager) Take(ctx context.Context) (*sql.DB, error) {
 	db.SetMaxIdleConns(5)
 
 	// 测试连接
-	if err := db.PingContext(ctx); err != nil {
+	ping := x.ping
+	if ping == nil {
+		ping = func(ctx context.Context, db *sql.DB) error { return db.PingContext(ctx) }
+	}
+	if err := ping(ctx, db); err != nil {
 		db.Close()
 		return nil, err
 	}

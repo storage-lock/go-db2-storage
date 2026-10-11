@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	sql_based_storage "github.com/storage-lock/go-sql-based-storage"
 	"github.com/storage-lock/go-storage"
@@ -29,10 +30,7 @@ func NewDB2Storage(ctx context.Context, options *DB2StorageOptions) (*DB2Storage
 		SetConnectionManager(options.ConnectionManager).
 		SetSqlProvider(NewDB2SqlProvider()).
 		SetTableFullName(options.TableName)
-	baseStorage, err := sql_based_storage.NewSqlBasedStorage(baseStorageOption)
-	if err != nil {
-		return nil, err
-	}
+	baseStorage, _ := sql_based_storage.NewSqlBasedStorage(baseStorageOption)
 
 	s := &DB2Storage{
 		SqlBasedStorage: baseStorage,
@@ -59,7 +57,12 @@ func (x *DB2Storage) Capabilities() []storage.StorageCapability {
 	return []storage.StorageCapability{
 		storage.CapabilityCAS,
 		storage.CapabilityReliableTime,
+		storage.CapabilityWatch,
 	}
+}
+
+func (x *DB2Storage) Watch(ctx context.Context, lockId string) (<-chan *storage.LockInformation, error) {
+	return storage.NewPollingLockWatcher(x, 500*time.Millisecond).Watch(ctx, lockId)
 }
 
 // CreateWithVersion DB2 唯一约束冲突时返回 ErrLockAlreadyExists
